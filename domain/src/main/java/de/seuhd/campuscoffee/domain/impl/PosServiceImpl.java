@@ -84,20 +84,50 @@ public class PosServiceImpl implements PosService {
      * Note: This is a stub implementation and should be replaced with real mapping logic.
      */
     private @NonNull Pos convertOsmNodeToPos(@NonNull OsmNode osmNode) {
-        if (osmNode.nodeId().equals(5589879349L)) {
-            return Pos.builder()
-                    .name("Rada Coffee & Rösterei")
-                    .description("Caffé und Rösterei")
-                    .type(PosType.CAFE)
-                    .campus(CampusType.ALTSTADT)
-                    .street("Untere Straße")
-                    .houseNumber("21")
-                    .postalCode(69117)
-                    .city("Heidelberg")
-                    .build();
-        } else {
+        var tags = osmNode.tags();
+
+        // Required fields for creating a POS: name and amenity/type and address (street + housenumber)
+        String name = tags.get("name");
+        String amenity = tags.get("amenity");
+        String street = tags.get("addr:street");
+        String houseNumber = tags.get("addr:housenumber");
+        String postcode = tags.get("addr:postcode");
+        String city = tags.get("addr:city");
+
+        if (name == null || street == null || houseNumber == null) {
             throw new OsmNodeMissingFieldsException(osmNode.nodeId());
         }
+
+        PosType type = PosType.CAFE; // default
+        if (amenity != null) {
+            switch (amenity) {
+                case "cafe", "coffee_shop" -> type = PosType.CAFE;
+                case "vending_machine" -> type = PosType.VENDING_MACHINE;
+                case "bakery" -> type = PosType.BAKERY;
+                case "restaurant", "canteen" -> type = PosType.CAFETERIA;
+                default -> type = PosType.CAFE;
+            }
+        }
+
+        Integer postal = null;
+        try {
+            if (postcode != null) postal = Integer.parseInt(postcode);
+        } catch (NumberFormatException ignored) {
+        }
+
+        // Build POS with available fields; description can use the OSM "description" or fallback to empty string
+        String description = tags.getOrDefault("description", "Imported from OpenStreetMap");
+
+        return Pos.builder()
+                .name(name)
+                .description(description)
+                .type(type)
+                .campus(CampusType.ALTSTADT) // best-effort default - mapping from OSM to campus not implemented
+                .street(street)
+                .houseNumber(houseNumber)
+                .postalCode(postal != null ? postal : 0)
+                .city(city != null ? city : "")
+                .build();
     }
 
     /**
